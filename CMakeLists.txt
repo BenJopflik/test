@@ -35,7 +35,6 @@ set (TESTS tests)
 
 set (TEST_SOURCES ${CMAKE_SOURCE_DIR}/tests/bank_test.cpp
                   ${CMAKE_SOURCE_DIR}/tests/client_test.cpp
-                  ${CMAKE_SOURCE_DIR}/tests/transfer_processor_test.cpp
 
                   )
 
