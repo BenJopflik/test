@@ -1,7 +1,11 @@
 
 @0x94f8245178b1f6c1;
 
-interface Bank
+# add namespace 
+#using Cxx = import "/capnp/c++.capnp";
+#$Cxx.namespace("L3");
+
+interface Transfer
 {
 	enum ErrorCode
 	{
@@ -9,7 +13,7 @@ interface Bank
 		invalidSrc @1;
 		invalidDst @2;
 		insufficientFunds @3;
-        malformed @4;
+        	malformed @4;
 	}	
 
 	transfer @0 (src : Data, dst : Data, amount : UInt64) -> (error : ErrorCode);
@@ -21,8 +25,9 @@ interface ClientManager
 	{
 		ok @0;
 		alreadyExists @1;
-        malformed @2;
+        	malformed @2;
 	}
 	
 	create @0 (id : Data, amount : UInt64) -> (error : ErrorCode);
+	delete @1 (id : Data);
 }

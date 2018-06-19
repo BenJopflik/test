@@ -4,6 +4,7 @@
 #include <kj/debug.h>
 #include <math.h>
 #include <iostream>
+#include "transfer_processor.hpp"
 
 
 
@@ -18,7 +19,7 @@ int main(int argc, const char* argv[])
   }
 
   capnp::EzRpcClient client(argv[1]);
-  Bank::Client bank_client = client.getMain<Bank>();
+  Transfer::Client bank_client = client.getMain<Transfer>();
 
   // Keep an eye on `waitScope`.  Whenever you see it used is a place where we
   // stop and wait for the server to respond.  If a line of code does not use

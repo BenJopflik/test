@@ -1,31 +1,39 @@
 #pragma once
 
 #include <cstdint>
+#include <mutex>
+#include "spinlock.hpp"
 
 class Client
 {
-        public:
-                Client(uint64_t amount = 0) : m_amount(amount) {}
-                ~Client() = default;
-                
-                uint64_t balance() const 
-                {
-                        std::shared_lock<std::shared_mutex> lock(m_mutex);
-                        return m_amount;
-                }
+public:
+    Client(uint64_t amount = 0) : m_amount(amount) {}
+    ~Client() = default;
 
-                bool update_balance(int64_t diff)
-                {
-                        std::unique_lock<std::shared_mutex> lock(m_mutex);
+    uint64_t balance() const 
+    {
+        std::lock_guard<Spinlock> lock(m_spinlock);
+        return m_amount;
+    }
 
-                    // TODO Add lock. can be called from different threds
-                    if (diff < 0 && m_amount < diff) 
-                            return false;
-                    m_amount += diff;
-                    return true;
-                }
+    bool withdraw(uint64_t amount)
+    {
+        std::lock_guard<Spinlock> lock(m_spinlock);
+        if (m_amount < amount)
+            return false;
 
-        private:
-                mutable std::shared_mutex m_mutex;
-                uint64_t m_amount = 0;
+        m_amount -= amount;
+
+        return true;
+    }
+
+    void deposit(uint64_t amount)
+    {
+        std::lock_guard<Spinlock> lock(m_spinlock);
+        m_amount += amount;	
+    }
+
+private:
+    mutable Spinlock m_spinlock;
+    uint64_t m_amount = 0;
 };

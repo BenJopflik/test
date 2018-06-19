@@ -1,97 +1,102 @@
-#include "build/bank.capnp.h"
-#include <kj/debug.h>
-#include <capnp/ez-rpc.h>
-#include <capnp/message.h>
 #include <iostream>
 #include <exception>
+#include <thread>
+#include <vector>
 
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+
+
+#include "transfer_processor.hpp"
 #include "bank.hpp"
 
+#include "build/bank.capnp.h"
 
-
-template <typename BankImpl>
-class Server final : public Bank::Server 
+int prepare_socket(const uint16_t port)
 {
-public:
-    Server(std::shared_ptr<BankImpl> bank_impl) : m_bank_impl(bank_impl) {}
 
-    ::kj::Promise<void> transfer(TransferContext context) override
+    int server_fd, new_socket, valread;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+    char buffer[1024] = {0};
+    char *hello = "Hello from server";
+      
+    // Creating socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
-            // TODO check src/dst size should be 32
-	auto params = context.getParams();
-        auto src = params.getSrc();
-        auto dst = params.getDst();
-        auto ammount = params.getAmount();
-        
-        auto result = m_bank_impl->transfer(src.begin(), dst.begin(), ammount);
-    
-        context.getResults().setError(to_proto_error_code(result));
-	return ::kj::READY_NOW;
-
-//        return evaluateImpl(context.getParams().getExpression())
-//        .then([KJ_CPCAP(context)](double value) mutable {
-//      context.getResults().setValue(kj::heap<ValueImpl>(value));
-     
+        perror("socket failed");
+        exit(EXIT_FAILURE);
     }
+      
+    // Forcefully attaching socket to the port 8080
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
+                                                  &opt, sizeof(opt)))
+    {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons( port );
+      
+    // Forcefully attaching socket to the port 8080
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address))<0)
+    {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+    if (listen(server_fd, 3) < 0)
+    {
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+    return server_fd;
+}
 
-	::Bank::ErrorCode to_proto_error_code(const typename BankImpl::ErrorCode code) const
-	{
-		switch (code)	
-		{
-			case BankImpl::ErrorCode::OK:
-				return ::Bank::ErrorCode::OK;
-
-			case BankImpl::ErrorCode::INVALID_SRC:
-				return ::Bank::ErrorCode::INVALID_SRC;
-
-			case BankImpl::ErrorCode::INSUFFICIENT_FUNDS:
-				return ::Bank::ErrorCode::INSUFFICIENT_FUNDS;
-
-			default:
-				throw std::runtime_error("unknown error code"); // TODO refact
-		}
-	}
-
-    private:
-        std::shared_ptr<BankImpl> m_bank_impl;
-
-};
 
 
 
 int main(int argc, const char* argv[]) 
 {
-        if (argc != 2) 
-        {
-                std::cerr << "usage: " << argv[0] << " ADDRESS[:PORT]\n"
-                        "Runs the server bound to the given address/port.\n"
-                        "ADDRESS may be '*' to bind to all local addresses.\n"
-                        ":PORT may be omitted to choose a port automatically." << std::endl;
-                return 1;
-        }
-	
-	auto bank = std::make_shared<BankImpl>();
+    if (argc != 2) 
+    {
+        std::cerr << "usage: " << argv[0] << " PORT\n";
+        return 1;
+    }
 
+    auto bank = std::make_shared<Bank>();
+
+    int port = std::stoi(argv[1]);
+    if (port < 0)
+    {
+        std::cerr << "invalid port" << std::endl;	
+        return 1;
+    }
+
+    std::vector<std::thread> threads(std::thread::hardware_concurrency());
+    std::cerr << "hardware concurrency " << std::thread::hardware_concurrency() << std::endl;	
+    auto thread_function = [&bank](const uint16_t port)
+    {
         // Set up a server.
-        capnp::EzRpcServer server(kj::heap<Server<BankImpl>>(bank), argv[1]);
+        capnp::EzRpcServer server(kj::heap<TransactionProcessor<Bank>>(bank), prepare_socket(port), port);
 
         // Write the port number to stdout, in case it was chosen automatically.
         auto& waitScope = server.getWaitScope();
-        uint port = server.getPort().wait(waitScope);
-        if (port == 0) 
-        {
-                // The address format "unix:/path/to/socket" opens a unix domain socket,
-                // in which case the port will be zero.
-                std::cout << "Listening on Unix socket..." << std::endl;
-        } 
-        else 
-        {
-                std::cout << "Listening on port " << port << "..." << std::endl;
-        }
-
+        std::cerr << "listening on " << server.getPort().wait(waitScope) << std::endl;
         // Run forever, accepting connections and handling requests.
         kj::NEVER_DONE.wait(waitScope);
+    };
 
-        return 0;
+    for (auto & thread : threads)
+        thread = std::thread(thread_function, port);
+
+    for (auto & thread : threads)
+        if (thread.joinable())
+            thread.join();
+
+    return 0;
 }
 
