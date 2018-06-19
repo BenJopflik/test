@@ -15,12 +15,12 @@ set (gtest_library_path "${CMAKE_BINARY_DIR}/googletest/googlemock/gtest/")
 
 
 set (SERVER "server")
-set (CLIENT "client")
+set (CLIENT "benchmark")
 
 
 capnp_generate_cpp(bankSources bankHeaders bank.capnp)
 
-add_executable(${CLIENT} bank-client.cpp ${bankSources})
+add_executable(${CLIENT} benchmark.cpp ${bankSources})
 target_link_libraries(${CLIENT} PRIVATE CapnProto::capnp-rpc)
 target_include_directories(${CLIENT} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 

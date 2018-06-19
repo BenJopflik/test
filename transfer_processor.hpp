@@ -15,13 +15,7 @@ public:
     {}
     
     
-    inline ::kj::Promise<void> transfer(TransferContext context) override
-    {
-        return transfer(context);
-    }
-
-    template <typename Context>
-    ::kj::Promise<void> transfer(Context context)
+    ::kj::Promise<void> transfer(TransferContext context) override
     {
         auto return_result = [&context](::Transfer::ErrorCode error) {context.getResults().setError(error); return ::kj::READY_NOW;};
 
@@ -34,6 +28,9 @@ public:
         static const size_t ID_SIZE = 32; // TODO move it from here
         if (src.size() != ID_SIZE || dst.size() != ID_SIZE)
             return return_result(::Transfer::ErrorCode::MALFORMED);
+        
+        if (src == dst)
+            return return_result(::Transfer::ErrorCode::INVALID_DST);
 
         auto amount = params.getAmount();
         auto result = m_bank_impl->transfer(src.begin(), dst.begin(), amount);
