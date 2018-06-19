@@ -25,9 +25,9 @@ interface ClientManager
 	{
 		ok @0;
 		alreadyExists @1;
-        	malformed @2;
+      	malformed @2;
 	}
 	
-	create @0 (id : Data, amount : UInt64) -> (error : ErrorCode);
-	delete @1 (id : Data);
+	createUser @0 (id : Data, amount : UInt64) -> (error : ErrorCode);
+	deleteUser @1 (id : Data) -> (error : ErrorCode);
 }

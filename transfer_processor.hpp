@@ -13,8 +13,15 @@ class TransactionProcessor final : public ::Transfer::Server
 public:
     TransactionProcessor(std::shared_ptr<BankImpl> bank_impl) : m_bank_impl(bank_impl) 
     {}
+    
+    
+    inline ::kj::Promise<void> transfer(TransferContext context) override
+    {
+        return transfer(context);
+    }
 
-    ::kj::Promise<void> transfer(TransferContext context) override
+    template <typename Context>
+    ::kj::Promise<void> transfer(Context context)
     {
         auto return_result = [&context](::Transfer::ErrorCode error) {context.getResults().setError(error); return ::kj::READY_NOW;};
 
@@ -28,8 +35,8 @@ public:
         if (src.size() != ID_SIZE || dst.size() != ID_SIZE)
             return return_result(::Transfer::ErrorCode::MALFORMED);
 
-        auto ammount = params.getAmount();
-        auto result = m_bank_impl->transfer(src.begin(), dst.begin(), ammount);
+        auto amount = params.getAmount();
+        auto result = m_bank_impl->transfer(src.begin(), dst.begin(), amount);
 
         return return_result(to_proto_error_code(result));
     }
@@ -43,6 +50,9 @@ public:
 
             case BankImpl::ErrorCode::INVALID_SRC:
                 return ::Transfer::ErrorCode::INVALID_SRC;
+
+            case BankImpl::ErrorCode::INVALID_DST:
+                return ::Transfer::ErrorCode::INVALID_DST;
 
             case BankImpl::ErrorCode::INSUFFICIENT_FUNDS:
                 return ::Transfer::ErrorCode::INSUFFICIENT_FUNDS;

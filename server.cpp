@@ -10,6 +10,7 @@
 
 
 #include "transfer_processor.hpp"
+#include "client_manager_processor.hpp"
 #include "bank.hpp"
 
 #include "build/bank.capnp.h"
@@ -57,6 +58,28 @@ int prepare_socket(const uint16_t port)
 }
 
 
+std::vector<std::thread> spawn_transfer_threads(const uint64_t number_of_threads, std::shared_ptr<Bank> bank, const uint16_t port)
+{
+    std::vector<std::thread> threads(std::thread::hardware_concurrency());
+
+    auto thread_function = [&bank](const uint16_t port)
+    {
+        // Set up a server.
+        capnp::EzRpcServer server(kj::heap<TransactionProcessor<Bank>>(bank), prepare_socket(port), port);
+
+        // Write the port number to stdout, in case it was chosen automatically.
+        auto& waitScope = server.getWaitScope();
+        std::cerr << "listening on " << server.getPort().wait(waitScope) << std::endl;
+        // Run forever, accepting connections and handling requests.
+        kj::NEVER_DONE.wait(waitScope);
+    };
+
+    for (auto & thread : threads)
+        thread = std::thread(thread_function, port);
+
+    return threads;
+}
+
 
 
 int main(int argc, const char* argv[]) 
@@ -76,26 +99,15 @@ int main(int argc, const char* argv[])
         return 1;
     }
 
-    std::vector<std::thread> threads(std::thread::hardware_concurrency());
-    std::cerr << "hardware concurrency " << std::thread::hardware_concurrency() << std::endl;	
-    auto thread_function = [&bank](const uint16_t port)
-    {
-        // Set up a server.
-        capnp::EzRpcServer server(kj::heap<TransactionProcessor<Bank>>(bank), prepare_socket(port), port);
+    auto threads = spawn_transfer_threads(std::thread::hardware_concurrency(), bank, port);
 
-        // Write the port number to stdout, in case it was chosen automatically.
-        auto& waitScope = server.getWaitScope();
-        std::cerr << "listening on " << server.getPort().wait(waitScope) << std::endl;
-        // Run forever, accepting connections and handling requests.
-        kj::NEVER_DONE.wait(waitScope);
-    };
+    capnp::EzRpcServer client_manager(kj::heap<ClientManagerProcessor<Bank>>(bank), std::string("*").append(std::to_string(port)));
 
-    for (auto & thread : threads)
-        thread = std::thread(thread_function, port);
+    // Write the port number to stdout, in case it was chosen automatically.
+    auto& waitScope = client_manager.getWaitScope();
 
-    for (auto & thread : threads)
-        if (thread.joinable())
-            thread.join();
+    // Run forever, accepting connections and handling requests.
+    kj::NEVER_DONE.wait(waitScope);
 
     return 0;
 }
