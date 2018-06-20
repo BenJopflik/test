@@ -4,15 +4,15 @@
 #include <kj/debug.h>
 #include <vector>
 #include <array>
-#include <cassert>
 #include <iostream>
 #include <thread>
 #include <iostream>
+#include <exception>
 
 static const std::vector<std::array<uint64_t, 4>> clients = 
 {
     {0x1, 0x2, 0x3, 0x4},
-    {0x2, 0x3, 0x4, 0x5},
+    {0x2, 0x3, 0x4, 0x5}, 
     {0x3, 0x4, 0x5, 0x6},
     {0x4, 0x5, 0x6, 0x7}
 };
@@ -35,7 +35,9 @@ void init_clients(uint16_t port)
         request.setAmount(1000);
 
         auto promise = request.send();
-        assert(promise.wait(waitScope).getError() == ::ClientManager::ErrorCode::OK);
+        auto res = promise.wait(waitScope).getError();
+        if (res != ::ClientManager::ErrorCode::OK)
+            throw std::runtime_error("User creation failed");
     }
 }
 
@@ -54,14 +56,15 @@ std::vector<std::thread> spawn_threads(const uint64_t number_of_threads, const u
         for (size_t i = 0; i < number_of_requests; ++i)
         {
             auto request = client.transferRequest();
+            request.setSrc(::capnp::Data::Reader((const uint8_t *)clients[ind].data(), 32));
             request.setSrc(readers[ind]);
             ind = (ind + 1) % number_of_readers;
             request.setDst(readers[ind]);
-            request.setAmount(1);
+            request.setAmount(100);
 
             auto promise = request.send();
-            promise.wait(waitScope).getError();
-            //std::cerr << std::this_thread::get_id() << " " << i << std::endl;
+            auto error = promise.wait(waitScope).getError();
+//            std::cerr << (uint16_t)error << std::endl;
         }
     };
 
@@ -88,9 +91,8 @@ int main(int argc, const char * argv[])
     }
     
     init_clients(port + 1); 
-   
-    //auto threads = spawn_threads(std::thread::hardware_concurrency(), 100000, port);
-    auto threads = spawn_threads(4, 100000, port);
+
+    auto threads = spawn_threads(std::thread::hardware_concurrency(), 100000, port);
     
     for (auto & thread : threads)
         if (thread.joinable())

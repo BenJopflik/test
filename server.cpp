@@ -87,15 +87,18 @@ int main(int argc, const char* argv[])
         return 1;
     }
 
-    //auto threads = spawn_transfer_threads(std::thread::hardware_concurrency(), bank, port);
-    auto threads = spawn_transfer_threads(4, bank, port);
+    auto threads = spawn_transfer_threads(std::thread::hardware_concurrency(), bank, port);
 
-    capnp::EzRpcServer client_manager(kj::heap<ClientManagerProcessor<Bank>>(bank), std::string("*:").append(std::to_string(port + 1)));
+    capnp::EzRpcServer client_manager(kj::heap<ClientManagerProcessor<Bank>>(bank), std::string("0.0.0.0:").append(std::to_string(port + 1)));
 
     auto& waitScope = client_manager.getWaitScope();
 
     kj::NEVER_DONE.wait(waitScope);
-    
+
+    for (auto & thread : threads) 
+        if (thread.joinable())
+            thread.join();
+
     return 0;
 }
 

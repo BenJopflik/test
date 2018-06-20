@@ -36,4 +36,5 @@ public:
 private:
     mutable Spinlock m_spinlock;
     uint64_t m_amount = 0;
+
 };
